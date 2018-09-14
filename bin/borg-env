@@ -1,0 +1,342 @@
+#!/bin/bash
+# TODO: delete an environment config
+# TODO: clone an environment
+# TODO: allow creation of new environments using the default config as template
+# TODO: MAYBE add a template environment file that is copied to new environments
+# TODO: list environments
+# TODO: remove "Usage" from commands
+# TODO: exit conde on "Usage" output of subcommands?
+
+APP_NAME='borg-env'
+
+SCRIPT="$(realpath "$0")"
+SCRIPT_NAME="$(basename "$SCRIPT")"
+
+#CONFIG_DIR="${XDG_CONFIG_HOME:-"${HOME}/.config"}/borg-env"
+CONFIG_DIR="${XDG_CONFIG_HOME:-"${HOME}/.config"}/borg-env"
+ENVIRONMENTS="${CONFIG_DIR}/environments"
+ENV_SUFFIX='env'
+
+DEFAULT_ENV='_default_'
+
+EDIT="${EDITOR:-vim}"
+
+USAGE="
+  Usage:
+    ${SCRIPT_NAME} -h|--help
+    ${SCRIPT_NAME} <command>
+"
+COMMANDS="
+  COMMANDS:
+    help    - Print more detailed help
+    create  - Create new environment
+    edit    - Edit environment
+    reload  - Reload current environment
+    set     - Set an environment
+    run     - Run a command with an environment
+"
+HELP="
+  Set or edit the borg environment of the current shell.
+  The editor will be determined by the \$EDITOR environment variable and fall
+  back to vim.
+
+  When the environment is switched, every variable prefixed with \"BORG_\"
+  will be cleared. Then the \"_default_\" config will be loaded before the
+  actual environment file is processes.
+
+  The config file will be placed in the \$XDG_CONFIG_HOME. If it is not set
+  ${APP_NAME} will fall back to \"\$HOME/.config\".
+
+  WARNING:
+  You can set any environment variable in the environment config but only the
+  \"\$BORG_*\" variables will be reset to default when you change the
+  environment. Use the \"${DEFAULT_ENV}\" environment config to reset others too.
+
+  COMMANDS:
+    help
+      Print this help.
+
+    create <env-name>
+      Create a new environment. This will create a new file in the config
+      directory and then start an editor to customize the config.
+
+    edit <env-name|->
+      Start an editor to edit an existing environment. Pass '-' as name to edit
+      the currently active config. To edit the default variables use
+      \"${DEFAULT_ENV}\" as name.
+
+    reload
+      Reload the current environment. Useful when the config has been changed
+      externally. This is not needed when using \`edit\` to change the currently
+      loaded config.
+
+    set [env-name]
+      Set the current environment. Leave env-name blank to load the default
+      config.
+
+    run <env-name> <command>
+      Run a command in a specific environment. Useful when you don't want to
+      pollute your environment when running borg.
+
+    shell-init
+      Eval the result of this in your shell config to enable switching
+      environments:
+
+        eval \"\$(${SCRIPT_NAME} shell-init)\"
+"
+
+
+main() {
+    local cmd="$1"
+    shift
+
+    case $cmd in
+        '')
+            usage
+            ;;
+        '-h'|'--help'|'help')
+            help
+            ;;
+        'create'|'edit'|'reload'|'set'|'run')
+            setup
+            cmd_${cmd} "$@"
+            ;;
+        *)
+            echo "ERROR: Unknown command \"${cmd}\"." >&2
+            usage >&2
+            EXIT 1
+            ;;
+    esac
+
+    EXIT
+}
+
+cmd_create() {
+    local name="$1"
+    local file="$(make_env_file_name "${name}")"
+
+    if [[ $name == '' ]]; then
+        echo "
+  Usage:
+    ${SCRIPT_NAME} create <env-name>
+"
+        EXIT
+    fi
+
+    if ! [[ $name =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+        EXIT_ERROR 1 "The environment name is invalid. Allowed characters are: 'a-z', 'A-Z', '0-9', '_', '.', '-'"
+    fi
+
+    if [[ $name =~ ^\. ]]; then
+        EXIT_ERROR 1 "The environment name must not start with a dot!"
+    fi
+
+    if [[ -f $file ]]; then
+        EXIT_ERROR 1 "An environment with that name already exists! Use \`edit\` to edit it."
+    fi
+
+    touch "$file" || EXIT_ERROR 1 "Could not create environment file \"${file}\"!"
+    edit "$file"
+
+    echo "Created new environment \"${name}\"."
+}
+
+cmd_edit() {
+    local name="$(get_env_name "$1")"
+    local file="$(make_env_file_name "${name}")"
+
+    if [[ $name == '' ]]; then
+        echo "
+  Usage:
+    ${SCRIPT_NAME} edit <env-name|->
+"
+        EXIT
+    fi
+
+    if [[ ! -f $file ]]; then
+        EXIT_ERROR 1 "Environment \"${name}\" does not exist. Use \`create\` to create it."
+    fi
+
+    edit "$file"
+}
+
+
+cmd_run() {
+    local name="$1"
+    shift
+    local cmd="$@"
+    local file="$(make_env_file_name "${name}")"
+
+    if [[ $name == '' ]] || [[ $cmd == '' ]]; then
+        echo "
+  Usage:
+    ${SCRIPT_NAME} run <env-name> <cmd>
+"
+        EXIT
+    fi
+
+    if [[ ! -f $file ]]; then
+        EXIT_ERROR 1 "Environment \"${name}\" does not exist."
+    fi
+
+    # Unset all environment variables beginning with 'BORG_'
+    unset $(env | grep -P '^BORG_' | cut -d'=' -f1)
+
+    # Parse the env file and declare the variables
+    set -o allexport
+    declare "$(parse_env_file "$file")"
+    set +o allexport
+
+    # Run the command
+    $cmd
+}
+
+
+parse_env_file() {
+    local file="$1"
+
+    # Build environment in an encapsulated process with clean env
+    env -i bash -c "
+        # Clean the rest of the env variables
+        unset \$(env | cut -d'=' -f1)
+
+        # Provide 'local' functionality
+        local() {
+            for __BORG_ENV_LOCAL__var in \"\$@\"; do
+                __BORG_ENV_LOCAL__LOCAL_VARS+=(\"\${__BORG_ENV_LOCAL__var/=*/}\")
+                if [[ \$__BORG_ENV_LOCAL__var =~ ^.*= ]]; then
+                    declare -g \"\$__BORG_ENV_LOCAL__var\"
+                fi
+            done
+        }
+
+        set -o allexport                               # Export every new variable
+        source \"$(get_default_env_file)\" >/dev/null  # Source the default env file
+        source \"${file}\" >/dev/null                  # Source the env file
+        set +o allexport                               # Stop exporting every new variable
+
+        # Unset all local variables
+        unset \${__BORG_ENV_LOCAL__LOCAL_VARS[@]}
+        unset \$(env | grep -P '^__BORG_ENV_LOCAL__' | cut -d'=' -f1)
+
+        # Unset special variables
+        unset cmd
+
+        # Print the environment (and skip the '_' variable)
+        env | grep -v '^_'
+    "
+}
+
+
+edit() {
+    local file="$1"
+
+    $EDIT "$file"
+}
+
+
+help() {
+    echo -n "$USAGE"
+    echo "$HELP"
+}
+
+
+usage() {
+    echo -n "$USAGE"
+    echo "$COMMANDS"
+}
+
+
+setup() {
+    local defaultEnvFile="$(get_default_env_file)"
+    create_dir "$CONFIG_DIR" "Could not create config directory \"${CONFIG_DIR}\"!"
+    create_dir "$ENVIRONMENTS"
+
+    if [[ ! -f "$defaultEnvFile" ]]; then
+        make_default_config
+    fi
+}
+
+
+get_env_name() {
+    local name="$1"
+
+    if [[ $name == '-' ]]; then
+        if [[ $BORG_ENV == '' ]]; then
+            EXIT_ERROR 1 "Currently not in any borg-env."
+        fi
+
+        name="$BORG_ENV"
+    fi
+
+    echo $name
+}
+
+
+get_default_env_file() {
+    make_env_file_name "$DEFAULT_ENV"
+}
+
+
+make_env_file_name() {
+    local name="$1"
+
+    echo "${ENVIRONMENTS}/${name}.${ENV_SUFFIX}"
+}
+
+
+create_dir() {
+    local dir="$1"
+    local errMsg="${2:-"Could not create directory \"${dir}\"!"}"
+
+    if [[ ! -d $dir ]]; then
+        mkdir -p "$dir" || EXIT_ERROR $? "$errMsg"
+    fi
+}
+
+
+make_default_config() {
+    local defaultEnvFile="$(get_default_env_file)"
+
+    cat >"$defaultEnvFile" <<EOF
+# This is the default brg environment file. It will be loaded every time the environment is changed.
+# All BORG_* variables will be unset anyways, so you don't have to overwrite them all here.
+#
+# Example usage:
+#
+#   BORG_REPO=/path/to/default/borg/repo
+#   # Just unset this one
+#   SOME_OTHER_VARIABLE=
+
+EOF
+}
+
+
+EXIT_ERROR() {
+    local code=$1
+    local msg="$2"
+
+    echo "ERROR: ${msg}"
+    EXIT $code
+}
+
+
+EXIT() {
+    local code=$1
+    exit $code
+}
+
+
+# Sanity checks
+# DO NOT USE ANY FUNCTION DEFINED IN THIS SCRIPT DURING SANITY CHECKS AS THEY MIGHT FAIL
+# DO NOT USE ANY FUNCTION DEFINED IN THIS SCRIPT DURING SANITY CHECKS AS THEY MIGHT FAIL
+# DO NOT USE ANY FUNCTION DEFINED IN THIS SCRIPT DURING SANITY CHECKS AS THEY MIGHT FAIL
+if [[ $HOME == '' ]]; then
+    echo "[FATAL ERROR]: The \$HOME environment variable is empty or not set!"
+    exit 255
+fi
+
+
+# Run the main program
+main "$@"
+
