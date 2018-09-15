@@ -97,7 +97,7 @@ main() {
         '-h'|'--help'|'help')
             help
             ;;
-        'create'|'edit'|'reload'|'set'|'run')
+        'create'|'edit'|'reload'|'set'|'run'|'show')
             setup
             cmd_${cmd} "$@"
             ;;
@@ -165,7 +165,6 @@ cmd_run() {
     local name="$1"
     shift
     local cmd="$@"
-    local file="$(make_env_file_name "${name}")"
 
     if [[ $name == '' ]] || [[ $cmd == '' ]]; then
         echo "
@@ -175,16 +174,9 @@ cmd_run() {
         EXIT
     fi
 
-    if [[ ! -f $file ]]; then
-        EXIT_ERROR 1 "Environment \"${name}\" does not exist."
-    fi
-
-    # Unset all environment variables beginning with 'BORG_'
-    unset $(env | grep -P '^BORG_' | cut -d'=' -f1)
-
     # Parse the env file and declare the variables
     set -o allexport
-    declare "$(parse_env_file "$file")"
+    declare "$(parse_env_file "$name")"
     set +o allexport
 
     # Run the command
@@ -192,8 +184,32 @@ cmd_run() {
 }
 
 
+cmd_show() {
+    local name="$1"
+
+    if [[ $name == '' ]] || [[ $cmd == '' ]]; then
+        echo "
+  Usage:
+    ${SCRIPT_NAME} show <env-name>
+"
+        EXIT
+    fi
+
+    # Parse the env file and display it
+    parse_env_file "$name"
+}
+
+
 parse_env_file() {
-    local file="$1"
+    local name="$1"
+    local file="$(make_env_file_name "${name}")"
+
+    if [[ ! -f $file ]]; then
+        EXIT_ERROR 1 "Environment \"${name}\" does not exist."
+    fi
+
+    # Unset all environment variables beginning with 'BORG_'
+    unset $(env | grep -P '^BORG_' | cut -d'=' -f1)
 
     # Build environment in an encapsulated process with clean env
     env -i bash -c "
