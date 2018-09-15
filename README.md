@@ -24,16 +24,12 @@ Core Features
 
 ### Manage environments
 
-*Not fully implemented yet*
-
 You can create new environments and edit, rename and delete them. It is also
 possible to clone an environment to a new config.
 
 The editor in which you can change the config is chosen by the `$EDITOR`
 variable. It will fallback to `vim` (exit vim: press `ESC` and type `:q` and hit
 `Enter` ;D)
-
-*Currently implemented is creating and editing*
 
     $ borg-env create my-hdd
     ... an editor will open in which you can define the environment variables ...
@@ -47,7 +43,7 @@ variable. It will fallback to `vim` (exit vim: press `ESC` and type `:q` and hit
     $ borg-env clone usb-hdd server
     Cloned "usb-hdd" to new environment "dummy".
 
-    $ borg-env delete dummy
+    $ borg-env remove dummy
     Do you really want to remove the environment "dummy"?
     (Type uppercase yes to confirm): YES
     Deleted environment "dummy".
