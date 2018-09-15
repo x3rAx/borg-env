@@ -174,10 +174,13 @@ cmd_run() {
         EXIT
     fi
 
-    # Parse the env file and declare the variables
-    set -o allexport
-    declare "$(parse_env_file "$name")"
-    set +o allexport
+    # TODO: reset IFS?
+    IFS=$'\n'
+    for line in $(parse_env_file "$name"); do
+        set -o allexport
+        declare -g "$line"
+        set +o allexport
+    done
 
     # Run the command
     $cmd
@@ -218,12 +221,16 @@ parse_env_file() {
 
         # Provide 'local' functionality
         local() {
+            # TODO: reset IFS?
+            IFS=$'\n'
             for __BORG_ENV_LOCAL__var in \"\$@\"; do
                 __BORG_ENV_LOCAL__LOCAL_VARS+=(\"\${__BORG_ENV_LOCAL__var/=*/}\")
                 if [[ \$__BORG_ENV_LOCAL__var =~ ^.*= ]]; then
                     declare -g \"\$__BORG_ENV_LOCAL__var\"
                 fi
             done
+            # TODO: reset IFS?
+            unset IFS
         }
 
         set -o allexport                               # Export every new variable
