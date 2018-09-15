@@ -6,6 +6,7 @@
 # TODO: list environments
 # TODO: remove "Usage" from commands
 # TODO: exit conde on "Usage" output of subcommands?
+# TODO: reload current env after edit
 
 APP_NAME='borg-env'
 
@@ -164,7 +165,7 @@ cmd_edit() {
 cmd_run() {
     local name="$1"
     shift
-    local cmd="$@"
+    local cmd=("$@")
 
     if [[ $name == '' ]] || [[ $cmd == '' ]]; then
         echo "
@@ -183,7 +184,7 @@ cmd_run() {
     done
 
     # Run the command
-    $cmd
+    ${cmd[@]}
 }
 
 
