@@ -67,11 +67,13 @@ HELP="
       \"${DEFAULT_ENV}\" as name.
 
     reload
+      NOT IMPLEMENTED YET
       Reload the current environment. Useful when the config has been changed
       externally. This is not needed when using \`edit\` to change the currently
       loaded config.
 
     set [env-name]
+      NOT IMPLEMENTED YET
       Set the current environment. Leave env-name blank to load the default
       config.
 
@@ -80,6 +82,7 @@ HELP="
       pollute your environment when running borg.
 
     shell-init
+      NOT IMPLEMENTED YET
       Eval the result of this in your shell config to enable switching
       environments:
 
@@ -97,6 +100,12 @@ main() {
             ;;
         '-h'|'--help'|'help')
             help
+            ;;
+        'reload'|'set'|'shell-init')
+            echo "">&2
+            echo "  SORRY: This feature is not implemented yet." >&2
+            echo "">&2
+            exit 1
             ;;
         'create'|'edit'|'reload'|'set'|'run'|'show')
             setup
