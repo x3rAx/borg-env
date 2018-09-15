@@ -8,6 +8,9 @@
 # TODO: exit conde on "Usage" output of subcommands?
 # TODO: reload current env after edit
 
+# Treat unset variables as an error.
+set -u
+
 APP_NAME='borg-env'
 
 SCRIPT="$(realpath "$0")"
@@ -352,7 +355,7 @@ EOF
 
 
 EXIT_ERROR() {
-    local code=$1
+    local code=${1:-0}
     local msg="$2"
 
     echo "ERROR: ${msg}"
@@ -361,7 +364,7 @@ EXIT_ERROR() {
 
 
 EXIT() {
-    local code=$1
+    local code=${1:-0}
     exit $code
 }
 
