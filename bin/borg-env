@@ -220,6 +220,9 @@ parse_env_file() {
         # Clean the rest of the env variables
         unset \$(env | cut -d'=' -f1)
 
+        # Make the env name available to the env config
+        BORG_ENV=\"${name}\"
+
         # Provide 'local' functionality
         local() {
             # TODO: reset IFS?
@@ -246,8 +249,11 @@ parse_env_file() {
         # Unset special variables
         unset cmd
 
+        # Export the env name to make sure it is not overwritten
+        export BORG_ENV=\"${name}\"
+
         # Print the environment (and skip the '_' variable)
-        env | grep -v '^_'
+        env | grep -v '^_='
     "
 }
 
