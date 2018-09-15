@@ -84,6 +84,9 @@ HELP="
       Run a command in a specific environment. Useful when you don't want to
       pollute your environment when running borg.
 
+    show <env-name>
+      Print the variables that this environment uses.
+
     shell-init
       NOT IMPLEMENTED YET
       Eval the result of this in your shell config to enable switching
