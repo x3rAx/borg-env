@@ -341,7 +341,7 @@ make_default_config() {
     local defaultEnvFile="$(get_default_env_file)"
 
     cat >"$defaultEnvFile" <<EOF
-# This is the default brg environment file. It will be loaded every time the environment is changed.
+# This is the default borg environment file. It will be loaded every time the environment is changed.
 # All BORG_* variables will be unset anyways, so you don't have to overwrite them all here.
 #
 # Example usage:
