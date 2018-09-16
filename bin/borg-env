@@ -94,6 +94,11 @@ HELP="
       Run a command in a specific environment. Useful when you don't want to
       pollute your environment when running borg.
 
+    borg <env-name> [borg-arguments...]
+      Run a borg command in the specified environment. This is mostly an alias
+      for the \`run\` command but it will also allow to specify the env variable
+      \"BORGENV_SUDO=true\". Doing so, will run borg with \`sudo -E\`.
+
     show <env-name>
       Print the variables that this environment uses.
 
@@ -124,7 +129,7 @@ main() {
             EXIT 1
             ;;
         'create'|'edit'|'rename'|'clone'|'remove'|\
-        'list'|'reload'|'set'|'run'|'show')
+        'list'|'reload'|'set'|'run'|'borg'|'show')
             setup
             cmd_${cmd} "$@"
             ;;
@@ -300,11 +305,11 @@ cmd_list() {
 
 
 cmd_run() {
-    local name="$1"
+    local name="${1:-}" # TODO: This is required. What do we do here to prevent "unbound variable"?
     shift
     local cmd=("$@")
 
-    if [[ $name == '' ]] || [[ $cmd == '' ]]; then
+    if [[ $name == '' ]] || [[ ${#cmd[@]} < 1 ]]; then
         echo "
   Usage:
     ${SCRIPT_NAME} run <env-name> <cmd>
@@ -312,16 +317,33 @@ cmd_run() {
         EXIT
     fi
 
-    # TODO: reset IFS?
-    IFS=$'\n'
-    for line in $(parse_env_file "$name"); do
-        set -o allexport
-        declare -g "$line"
-        set +o allexport
-    done
+    setup_env "$name"
 
     # Run the command
     ${cmd[@]}
+}
+
+cmd_borg() {
+    local name="$1"
+    shift
+    local cmd=("$@")
+
+    if [[ $name == '' ]]; then
+        echo "
+  Usage:
+    ${SCRIPT_NAME} borg <env-name> [borg-arguments...]
+"
+        EXIT
+    fi
+
+    setup_env "$name"
+
+    # Run the command
+    if [[ ${BORGENV_SUDO:-} == true ]]; then
+        sudo -E borg ${cmd[@]}
+    else
+        borg ${cmd[@]}
+    fi
 }
 
 
@@ -392,6 +414,19 @@ parse_env_file() {
         # Print the environment (and skip the '_' variable)
         env | grep -v '^_='
     "
+}
+
+
+setup_env() {
+    local name="$1"
+
+    # TODO: reset IFS?
+    IFS=$'\n'
+    for line in $(parse_env_file "$name"); do
+        set -o allexport
+        declare -g "$line"
+        set +o allexport
+    done
 }
 
 

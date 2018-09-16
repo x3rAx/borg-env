@@ -87,8 +87,9 @@ should be executed.
 
 For the use case of running Borg there is also an alias:
 
-*Not implemented yet*
-
     $ borg-env borg hdd create ::dummy-backup /home
+
+This also allows setting `BORGENV_SUDO=true` in the environment config to run
+borg with `sudo -E`.
 
 
